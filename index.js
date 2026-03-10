@@ -109,36 +109,43 @@ client.on(Events.InteractionCreate, async interaction => {
           .setStyle(ButtonStyle.Primary)
       );
     
-   Description('Optional image URL for the embed')
-          .setRequired(false)
-      ),
+    await interaction.reply({ embeds: [embed], components: [row] });
+  }
+  
+  if (interaction.commandName === 'panelcategory') {
+    const category = interaction.options.getChannel('category');
+    config.panelCategory = category.id;
+    await interaction.reply({ content: `✅ Panel tickets will now be created in ${category}`, ephemeral: true });
+  }
+  
+  if (interaction.commandName === 'servicepanel') {
+    const imageUrl = interaction.options.getString('image');
     
-    new SlashCommandBuilder()
-      .setName('panelcategory')
-      .setDescription('Set where ticket panels create tickets')
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addChannelOption(option => 
-        option.setName('category')
-          .setDescription('The category for tickets')
-          .addChannelTypes(ChannelType.GuildCategory)
-          .setRequired(true)
-      ),
+    const embed = new EmbedBuilder()
+      .setTitle('💼 Robuck Service')
+      .setDescription(`**Sell your stuff to me**
+Via:
+• Crypto
+• PayPal
+• In-games
+• Robux
+
+**Buy my stuff**
+Via:
+• Crypto
+• PayPal
+• In-games
+• Robux`)
+      .setColor(0x57F287)
+      .setTimestamp();
     
-    new SlashCommandBuilder()
-      .setName('servicepanel')
-      .setDescription('Spawn the service selection panel')
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addStringOption(option => 
-        option.setName('image')
-          .setDescription('Optional image URL for the embed')
-          .setRequired(false)
-      ),
+    if (imageUrl) {
+      embed.setImage(imageUrl);
+    }
     
-    new SlashCommandBuilder()
-      .setName('servicecategory')
-      .setDescription('Set where service panel tickets go')
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addChannelOption(option => 
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilderChannelOption(option => 
         option.setName('category')
           .setDescription('The category for service tickets')
           .addChannelTypes(ChannelType.GuildCategory)
