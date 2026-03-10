@@ -10,7 +10,10 @@ const {
   SlashCommandBuilder,
   ChannelType,
   PermissionFlagsBits,
-  Events
+  Events,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require('discord.js');
 
 const client = new Client({
@@ -27,6 +30,9 @@ const config = {
   panelCategory: null,
   serviceCategory: null
 };
+
+// Store modal responses temporarily
+const modalData = new Map();
 
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
@@ -173,7 +179,9 @@ Via:
   
   // Close Command
   if (interaction.commandName === 'close') {
-    if (!interaction.channel.name.startsWith('ticket-')) {
+    if (!interaction.channel.name.startsWith('ticket-') && 
+        !interaction.channel.name.startsWith('buy-') && 
+        !interaction.channel.name.startsWith('sell-')) {
       return interaction.reply({ content: '❌ This is not a ticket channel!', ephemeral: true });
     }
     
@@ -189,46 +197,65 @@ Via:
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
   
-  // Main Panel Ticket
+  // Main Panel Ticket - Show Modal First
   if (interaction.customId === 'create_ticket') {
     if (!config.panelCategory) {
       return interaction.reply({ content: '❌ Panel category not set! Use `/panelcategory` first.', ephemeral: true });
     }
     
-    const channel = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.username}`,
-      type: ChannelType.GuildText,
-      parent: config.panelCategory,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: interaction.user.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
-        }
-      ]
-    });
+    // Create Modal
+    const modal = new ModalBuilder()
+      .setCustomId('robux_order_modal')
+      .setTitle('🎮 Robux Order Form');
     
-    const embed = new EmbedBuilder()
-      .setTitle('🎫 Ticket Created')
-      .setDescription(`Welcome ${interaction.user}! Support will be with you shortly.\n\nPlease describe what you'd like to buy.`)
-      .setColor(0x5865F2);
+    // Question 1: How much robux
+    const robuxAmountInput = new TextInputBuilder()
+      .setCustomId('robux_amount')
+      .setLabel('How much robux are you buying?')
+      .setPlaceholder('Example: 1000, 5000, 10000')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMaxLength(50);
     
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId('close_ticket')
-          .setLabel('🔒 Close Ticket')
-          .setStyle(ButtonStyle.Danger)
-      );
+    // Question 2: Quantity/Amount
+    const quantityInput = new TextInputBuilder()
+      .setCustomId('quantity')
+      .setLabel('Quantity/Amount')
+      .setPlaceholder('Example: 1, 2, 3 or specific amount')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMaxLength(100);
     
-    await channel.send({ content: `${interaction.user}`, embeds: [embed], components: [row] });
-    await interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
+    // Question 3: Payment Method
+    const paymentInput = new TextInputBuilder()
+      .setCustomId('payment_method')
+      .setLabel('Payment Method')
+      .setPlaceholder('Crypto, PayPal, CashApp, Venmo, etc.')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMaxLength(100);
+    
+    // Question 4: Going first confirmation
+    const goFirstInput = new TextInputBuilder()
+      .setCustomId('go_first')
+      .setLabel('Do you realize you will go first?')
+      .setPlaceholder('Yes or No')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMaxLength(10);
+    
+    // Add inputs to action rows (max 5 per row, 1 input per row for modals)
+    const row1 = new ActionRowBuilder().addComponents(robuxAmountInput);
+    const row2 = new ActionRowBuilder().addComponents(quantityInput);
+    const row3 = new ActionRowBuilder().addComponents(paymentInput);
+    const row4 = new ActionRowBuilder().addComponents(goFirstInput);
+    
+    modal.addComponents(row1, row2, row3, row4);
+    
+    await interaction.showModal(modal);
   }
   
-  // Buy Stuff Ticket
+  // Buy Stuff Ticket (No modal - direct creation)
   if (interaction.customId === 'buy_stuff') {
     if (!config.serviceCategory) {
       return interaction.reply({ content: '❌ Service category not set! Use `/servicecategory` first.', ephemeral: true });
@@ -267,7 +294,7 @@ client.on(Events.InteractionCreate, async interaction => {
     await interaction.reply({ content: `✅ Buy ticket created: ${channel}`, ephemeral: true });
   }
   
-  // Sell Stuff Ticket
+  // Sell Stuff Ticket (No modal - direct creation)
   if (interaction.customId === 'sell_stuff') {
     if (!config.serviceCategory) {
       return interaction.reply({ content: '❌ Service category not set! Use `/servicecategory` first.', ephemeral: true });
@@ -313,6 +340,61 @@ client.on(Events.InteractionCreate, async interaction => {
     setTimeout(async () => {
       await interaction.channel.delete().catch(console.error);
     }, 5000);
+  }
+});
+
+// Modal Submit Handler
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isModalSubmit()) return;
+  
+  if (interaction.customId === 'robux_order_modal') {
+    // Get responses
+    const robuxAmount = interaction.fields.getTextInputValue('robux_amount');
+    const quantity = interaction.fields.getTextInputValue('quantity');
+    const paymentMethod = interaction.fields.getTextInputValue('payment_method');
+    const goFirst = interaction.fields.getTextInputValue('go_first');
+    
+    // Create ticket channel
+    const channel = await interaction.guild.channels.create({
+      name: `ticket-${interaction.user.username}`,
+      type: ChannelType.GuildText,
+      parent: config.panelCategory,
+      permissionOverwrites: [
+        {
+          id: interaction.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: interaction.user.id,
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
+        }
+      ]
+    });
+    
+    // Create embed with modal responses
+    const embed = new EmbedBuilder()
+      .setTitle('🎫 New Robux Order')
+      .setDescription(`Order from ${interaction.user}`)
+      .addFields(
+        { name: '👤 User', value: `${interaction.user} (${interaction.user.id})`, inline: false },
+        { name: '💎 Robux Amount', value: robuxAmount, inline: true },
+        { name: '📦 Quantity/Amount', value: quantity, inline: true },
+        { name: '💳 Payment Method', value: paymentMethod, inline: true },
+        { name: '✅ Going First?', value: goFirst, inline: true }
+      )
+      .setColor(0x5865F2)
+      .setTimestamp();
+    
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId('close_ticket')
+          .setLabel('🔒 Close Ticket')
+          .setStyle(ButtonStyle.Danger)
+      );
+    
+    await channel.send({ content: `${interaction.user}`, embeds: [embed], components: [row] });
+    await interaction.reply({ content: `✅ Ticket created with your order details: ${channel}`, ephemeral: true });
   }
 });
 
